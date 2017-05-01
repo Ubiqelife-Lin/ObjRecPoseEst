@@ -3,6 +3,7 @@ Created on Apr 30, 2015
 
 @author: wohlhart
 '''
+# from data.basetypes import NamedImgSequence
 import matplotlib
 matplotlib.use('Qt5Agg')
 
@@ -308,9 +309,9 @@ def linemod_test_main(fileName=None, cfg=None):
     print("num weight is descrNet: {}".format(descrNet.getNumWeights()))
     print("    total: {}".format(
         numpy.sum([numpy.prod(ws) for ws in descrNet.getNumWeights()])))
+    print("number of layers: {}".format(len(descrNet.layers)))
 
     # prepare test data
-
     #lmDataBasepath = '/home/wohlhart/work/data/linemod/'
     lmDataBasepath = readCfgParam(
         cfg, 'paths', 'lmDataBase', default='/home/wohlhart/work/data/linemod/')
@@ -336,11 +337,42 @@ def linemod_test_main(fileName=None, cfg=None):
 
     print ('Loading took %.1fs' % ((pklload_end_time - pklload_start_time)))
 
-#     patch0 = testSeqs['cat'].data[52]
-#     print("fn {}".format(patch0.frame.filename))
-#     print("cn {}".format(patch0.frame.className))
-#     cv2.imshow("cat52",patch0.dpt/2.+1.)
+#     patch0 = testSeqs['duck'].data[52]
+#     print("Test sequence!!")
+#     print("class name: {}".format(patch0.frame.className))
+#     print("frame name: {}".format(patch0.frame.filename))
+#     print("-cropArea: {}".format(patch0.cropArea))
+#     cv2.imshow("-dpt/2+1", patch0.dpt / 2. + 1.)
+#     cv2.imshow("-dpt", patch0.dpt)
+#     cv2.imshow("-img", patch0.img)
 #     cv2.waitKey()
+#     cv2.destroyAllWindows()
+
+#     # duboisf: Add intruder images!!!!!!!!!
+#     my_image_dir_path = "/home/duboisf/Documents/Semester_thesis/datasets/kinect2/duck_one_revolution_cropped/"
+#     my_image_file_names = os.listdir(my_image_dir_path)
+#     my_patches = []
+#     tmpl_patch = patch0
+#     for i in range(len(my_image_file_names) / 2):
+#         tmpl_patch.frame.className = "my_Duck"
+#         tmpl_patch.frame.filename = "my_filename"
+#         tmpl_patch.img = cv2.imread(
+#             os.path.join(my_image_dir_path, "color{}.png".format(i + 1)))
+# #         cv2.imshow("tmpl_patch-img", tmpl_patch.img)
+#         tmpl_patch.dpt = cv2.imread(
+#             os.path.join(my_image_dir_path, "depth{}.png".format(i + 1)))
+#         my_patches.append(tmpl_patch)
+#     my_seq = NamedImgSequence(name='myDuck', data=my_patches)
+#     testSeqs['duck'] = my_seq
+#
+#     #del testSeqs['duck']
+#     #del testSeqs['bowl']
+#     #del testSeqs['glue']
+
+    # remove all but first patches.
+    del(testSeqs['ape'][1][0:-1])
+    del(testSeqs['bowl'][1][0:-1])
+    del(testSeqs['glue'][1][0:-1])
 
     # print("###### bs {}".format(descrNet.cfgParams.batch_size))
     testdata_set = BatchedImgSeqDataset()
@@ -351,10 +383,13 @@ def linemod_test_main(fileName=None, cfg=None):
     img0 = numpy.concatenate([x[0] for x in testdata_set.x], axis=0) if isinstance(
         testdata_set.x, list) else testdata_set.x[0]
     img0 = numpy.swapaxes(numpy.swapaxes(img0, 0, 1), 1, 2)
-    print(img0.shape)
+    print("img0-min = {}".format(numpy.min(img0)))
+    print("img0-max = {}".format(numpy.max(img0)))
+    print("img0-shape: " + str(img0.shape))
     if showPlots:
+        # !!!! zero-mean? no, just for brightness
         cv2.imshow("img0", img0 + 0.5)
-    # cv2.waitKey()
+    cv2.waitKey()
 
     # DEBUG: show cam poses
     # visBatchedDatasetCamPoses(testdata_set)
@@ -424,7 +459,7 @@ def linemod_test_main(fileName=None, cfg=None):
 
     ##########################################################################
     # visualize testdata and traindata
-    visTestDataDescrs = True
+    visTestDataDescrs = True  # !!! needed?
     testOnTrainData = False
     if testOnTrainData or visTestDataDescrs:
 
@@ -490,6 +525,7 @@ def linemod_test_main(fileName=None, cfg=None):
     # throw away results for invalid samples (that were added to fill up
     # minibatches)
     testDescrs = res[testDataValidIdx]
+    print("testDescrs.shape = {}".format(testDescrs.shape))
 
     print ('Computing descriptors for %d samples took %.1fs' % (
         testdata_set.numSamples, (descr_comp_end_time - descr_comp_start_time)))
@@ -500,12 +536,60 @@ def linemod_test_main(fileName=None, cfg=None):
     res = descrNet.computeDescriptors(
         tmpl_set, dataManager, batch_size=tmpl_set.batchSize)
     tmplDescrs = res[tmplDataValidIdx]
-
     print("tmplDescrs.shape {}".format(tmplDescrs.shape))
 
     # distances of descriptors
     dst = scipy.spatial.distance.cdist(testDescrs, tmplDescrs)
     print("dst.shape {}".format(dst.shape))
+
+    # smallest and biggest distances
+    print("Smallest distance = {}".format(numpy.min(dst)))
+    print("Largest distance  = {}".format(numpy.max(dst)))
+
+    # pick best matching template index
+    best_match_tmp_idx = numpy.argmin(dst, axis=1)
+
+    for test_idx, tmpl_idx in zip(range(dst.shape[0]), best_match_tmp_idx):
+        print("#{}".format(test_idx))
+        test_valid_idx = testDataValidIdx[test_idx]
+        tmp_valid_idx = tmplDataValidIdx[tmpl_idx]
+
+        # Show test image.
+        test_img = testdata_set.x[0][test_valid_idx, :, :, :]
+        test_dpt = testdata_set.x[1][test_valid_idx, :, :, :]
+        cv2.imshow("test image-color",
+                   numpy.rollaxis(test_img + 0.5, 0, 3))
+        cv2.imshow("test image-depth",
+                   numpy.rollaxis(test_dpt / 2.0 + 1.0, 0, 3))
+
+        print("Test image\t min={}, max={}".format(
+            numpy.min(test_img), numpy.max(test_img)))
+        print("Test depth\t min={}, max={}".format(
+            numpy.min(test_dpt), numpy.max(test_dpt)))
+
+        # Show template image.
+        tmpl_img = tmpl_set.x[0][tmp_valid_idx, :, :, :]
+        tmpl_dpt = tmpl_set.x[1][tmp_valid_idx, :, :, :]
+        cv2.imshow("template image-color",
+                   numpy.rollaxis(tmpl_img + 0.5, 0, 3))
+        cv2.imshow("template image-depth",
+                   numpy.rollaxis(tmpl_dpt / 2.0 + 1.0, 0, 3))
+
+        print("Template image\t min={}, max={}".format(
+            numpy.min(tmpl_img), numpy.max(tmpl_img)))
+        print("Template depth\t min={}, max={}".format(
+            numpy.min(tmpl_dpt), numpy.max(tmpl_dpt)))
+
+        # Show template descriptor.
+        print("Template descriptor = {}".format(tmplDescrs[tmpl_idx]))
+
+        # Show template class.
+        print("Template class = {}".format(tmplLabels[tmpl_idx]))
+
+        # Show template pose (trans + rot).
+        print("Template rot = {}\n".format(tmplRots[tmpl_idx]))
+
+        cv2.waitKey()
 
     # calculate similarity of poses of train sample and templates of the
     # sample class
@@ -519,8 +603,7 @@ def linemod_test_main(fileName=None, cfg=None):
         sims.append(sim + 2.)
     sim = scipy.linalg.block_diag(*sims) - 2.
     print("sim.shape {}".format(sim.shape))
-
-    print("sim mn/mx {},{}".format(numpy.min(sim), numpy.max(sim)))
+    print("sim min/max: {}/{}".format(numpy.min(sim), numpy.max(sim)))
 
     # show sim matrix
     #cv2.imshow("sims",(sim-numpy.min(sim))/(numpy.max(sim) - numpy.min(sim)))
@@ -638,6 +721,7 @@ if __name__ == '__main__':
     if len(sys.argv) > 1:
         # print(sys.argv[1])
         fileName = sys.argv[1]
+        print("fileName = {}".format(fileName))
     else:
         raise ValueError("Need one argument: the net to load")
 
