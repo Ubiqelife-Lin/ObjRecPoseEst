@@ -6,6 +6,7 @@ Created on Apr 30, 2015
 # from data.basetypes import NamedImgSequence
 import matplotlib
 matplotlib.use('Qt5Agg')
+from rgbdcnn.helpers.improc import preprocessMyTestImages
 
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # @UnresolvedImport @UnusedImport
@@ -34,6 +35,7 @@ from util.vis import showLinemodFrame, calcAndVis3DDescriptorsWithRotWithTrainer
     visBatchedDatasetCamPoses, visBatchedTrainDatasetCamPoses, plotAngleErrors,\
     visClosestTmpls, visWrongestClosestTmpls, visSimsVsDsts,\
     calcAndVis3DDescriptorsWithRot
+from data.basetypes import Patch
 from data.importers import LinemodTrainDataImporter
 from data.batcheddatasets import BatchedImgSeqDataset
 from main_train import loadTrainResultsPickle, findNiceMacroBatchSize
@@ -334,19 +336,7 @@ def linemod_test_main(fileName=None, cfg=None):
         _, _, testSeqs = cPickle.load(f)
     f.close()
     pklload_end_time = time.clock()
-
     print ('Loading took %.1fs' % ((pklload_end_time - pklload_start_time)))
-
-#     patch0 = testSeqs['duck'].data[52]
-#     print("Test sequence!!")
-#     print("class name: {}".format(patch0.frame.className))
-#     print("frame name: {}".format(patch0.frame.filename))
-#     print("-cropArea: {}".format(patch0.cropArea))
-#     cv2.imshow("-dpt/2+1", patch0.dpt / 2. + 1.)
-#     cv2.imshow("-dpt", patch0.dpt)
-#     cv2.imshow("-img", patch0.img)
-#     cv2.waitKey()
-#     cv2.destroyAllWindows()
 
 #     # duboisf: Add intruder images!!!!!!!!!
 #     my_image_dir_path = "/home/duboisf/Documents/Semester_thesis/datasets/kinect2/duck_one_revolution_cropped/"
@@ -369,10 +359,56 @@ def linemod_test_main(fileName=None, cfg=None):
 #     #del testSeqs['bowl']
 #     #del testSeqs['glue']
 
-    # remove all but first patches.
-    del(testSeqs['ape'][1][0:-1])
-    del(testSeqs['bowl'][1][0:-1])
-    del(testSeqs['glue'][1][0:-1])
+    # Remove all but first n_linemod_test_samples data patches.
+    n_test_samples = 10
+    n_own_test_samples = 5
+    n_linemod_test_samples = n_test_samples - n_own_test_samples
+    del(testSeqs['duck'].data[n_linemod_test_samples - 1:-1])
+
+    add_my_own = True
+
+    if (add_my_own and n_own_test_samples > 0):
+        # Copy patch for structure.
+        patch_tmpl = testSeqs['duck'].data[0]
+
+        image_dir_path = "/home/duboisf/Documents/Semester_thesis/datasets/kinect2/2017-04-26_17:28"
+        color_images, depth_images = preprocessMyTestImages(image_dir_path)
+
+        # Prepend my own images from disk.
+        print("Adding new unseen images...........")
+        my_test_samples = []
+        for i in range(n_own_test_samples):
+            # Contruct new Patch.
+            patch_i = Patch(img=color_images[i],
+                            dpt=numpy.squeeze(depth_images[i]),
+                            mask=None,
+                            frame=patch_tmpl.frame,
+                            cropArea=patch_tmpl.cropArea)
+#             patch_i.frame.className = "duck"
+#             patch_i.img = color_images[i]
+#             patch_i.dpt = numpy.squeeze(depth_images[i])
+            my_test_samples.append(patch_i)
+        testSeqs['duck'].data[:0] = my_test_samples
+
+    # Remove all but first patch.
+    del(testSeqs['bowl'].data[0:-1])
+    del(testSeqs['glue'].data[0:-1])
+
+    # View a sample patch.
+    patchApe = testSeqs['duck'].data[0]
+    print("class name: {}".format(patchApe.frame.className))
+    print("frame name: {}".format(patchApe.frame.filename))
+    print("-cropArea: {}".format(patchApe.cropArea))
+    print(
+        "Frame-img  min,max: {},{}".format(numpy.min(patchApe.img), numpy.max(patchApe.img)))
+    print(
+        "Frame-dpt  min,max: {},{}".format(numpy.min(patchApe.dpt), numpy.max(patchApe.dpt)))
+    cv2.imshow("-img", patchApe.img + 0.5)
+    cv2.imshow("-dpt/2+1", patchApe.dpt / 2.0 + 1.0)
+    cv2.imshow("-dpt/2+0.5", patchApe.dpt / 2.0 + 0.5)
+    cv2.imshow("-dpt", patchApe.dpt)
+    cv2.waitKey()
+    cv2.destroyAllWindows()
 
     # print("###### bs {}".format(descrNet.cfgParams.batch_size))
     testdata_set = BatchedImgSeqDataset()
@@ -390,6 +426,7 @@ def linemod_test_main(fileName=None, cfg=None):
         # !!!! zero-mean? no, just for brightness
         cv2.imshow("img0", img0 + 0.5)
     cv2.waitKey()
+    cv2.destroyAllWindows()
 
     # DEBUG: show cam poses
     # visBatchedDatasetCamPoses(testdata_set)
