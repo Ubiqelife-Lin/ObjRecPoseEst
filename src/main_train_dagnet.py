@@ -55,17 +55,13 @@ def loadData(lmDataBasepath=None, targetSize=64, inputMode=2, trainSplitFactor=1
     imgNumsTemplates = numpy.arange(301)
     imgNumsTrain = numpy.arange(1241) + 301
 
-    # DEBUG, small dataset
-    #imgNumsTemplates = numpy.arange(3)
-    #imgNumsTrain = numpy.arange(5)+301
-
-    #targetSize = 128
-
-    print("lmDataBasepath {}".format(lmDataBasepath))
+    # DEBUG, small dataset # TODO(duboisf) disable after debugging!!
+#     imgNumsTemplates = numpy.arange(3)
+#     imgNumsTrain = numpy.arange(5) + 3  # + 301
 
     lineModTrainImgporter = LinemodTrainDataImporter(lmDataBasepath)
 
-    print("Loading Templates")
+    print("\nLoading Templates")
     # TEMPLATES
     tmplSeqs = dict()
     for i in range(len(seqNames)):
@@ -74,12 +70,15 @@ def loadData(lmDataBasepath=None, targetSize=64, inputMode=2, trainSplitFactor=1
         tmplSeqs[seqN] = lineModTrainImgporter.loadSequence(
             objName=seqN, imgNums=imgNumsTemplates, cropSize=20.0, targetSize=targetSize, zRotInv=zri)
 
+#         cv2.imshow("tmpl_{}".format(seqN), tmplSeqs.data[0].dpt / 2 + 0.5)
+#         cv2.waitKey()
+
         # DEBUG
         #rots = numpy.array([patch.frame.pose.relCamPosZRotInv for patch in tmplSeqs[seqN].data])
         #print("rots.shape {}".format(rots.shape))
         #print("rots mn/mx x {},{}, y {},{}, z:{},{}".format(numpy.min(rots[:,0]),numpy.max(rots[:,0]),numpy.min(rots[:,1]),numpy.max(rots[:,1]),numpy.min(rots[:,2]),numpy.max(rots[:,2])))
 
-    print("Loading Synthetic Training Data")
+    print("\nLoading Synthetic Training Data")
     # TRAIN data
     trainSeqs = dict()
     for i in range(len(seqNames)):
@@ -88,6 +87,9 @@ def loadData(lmDataBasepath=None, targetSize=64, inputMode=2, trainSplitFactor=1
         trainSeqs[seqN] = lineModTrainImgporter.loadSequence(
             objName=seqN, imgNums=imgNumsTrain, cropSize=20.0, targetSize=targetSize, zRotInv=zri)
 
+#         cv2.imshow("train_{}".format(seqN), trainSeqs.data[0].dpt / 2 + 0.5)
+#         cv2.waitKey()
+
     # TRAIN data, TEST data
     #traindata_set = LinemodBatchedTestData()
     #testdata_set = LinemodBatchedTestData()
@@ -95,15 +97,15 @@ def loadData(lmDataBasepath=None, targetSize=64, inputMode=2, trainSplitFactor=1
     #trainSeqs = dict()
     testSeqs = dict()
 
-    print("Loading real-world Training and Test Data")
+    print("\nLoading real-world Training and Test Data")
     lmi = data.importers.LinemodImporter(lmDataBasepath)
     for i in range(len(seqNames)):
         seqName = seqNames[i]
         seq = lmi.loadSequence(seqName, zRotInv=zRotInv[
                                i], inputMode=inputMode, cropAtGtPos=True, cropSize=20., targetSize=targetSize)
 
-        # cv2.imshow("test_{}".format(seqName),seq.data[0].dpt/2+0.5)
-        # cv2.waitKey()
+#         cv2.imshow("test_{}".format(seqName), seq.data[0].dpt / 2 + 0.5)
+#         cv2.waitKey()
 
         # distr to trainSeqs and testSeqs
         numFrames = len(seq.data)
@@ -141,6 +143,7 @@ def loadData(lmDataBasepath=None, targetSize=64, inputMode=2, trainSplitFactor=1
         # for every image the idx of the closest tmpl
         maxSimTmplIdx = numpy.argmax(sim, axis=0)
 
+        # TODO(duboisf) split better
         # step 2, take training samples for each template, make the rest test
         trainIdx = numpy.zeros(numFrames, dtype=numpy.int)
         testIdx = numpy.zeros(numFrames, dtype=numpy.int)
@@ -337,8 +340,8 @@ def createTripleAndPairsDatasetFromImgSeq(tmplSeqs, trainSeqs, inputMode=0, batc
 
     # maximally every trainSample and its closest tmpl + one random ->
     # 3*numSamples/batchSize
-    maxNumBatches = numpy.ceil(
-        (3 * numTrainPerClass * numClasses) / float(batchSize))
+    maxNumBatches = int(numpy.ceil(
+        (3 * numTrainPerClass * numClasses) / float(batchSize)))
     allData = [numpy.zeros(
         (maxNumBatches * batchSize, nChan, imgH, imgW), dtype=floatX) for nChan in nChans]
     allLabels = numpy.zeros((maxNumBatches * batchSize,), dtype=numpy.int32)
@@ -1162,8 +1165,6 @@ def findNiceMacroBatchSize(macroBatchSize, maxBytes, batchSizeBytes, datasetsNBa
 
 
 def prepareData(cfg, rng):
-    print("create data")
-
     targetSize = readCfgIntParam(cfg, 'input', 'targetSize', default=64)
 
     inputMode = readCfgIntParam(cfg, 'input', 'mode', default=0)
@@ -1185,12 +1186,17 @@ def prepareData(cfg, rng):
         cfg, 'trainset', 'trainSplitFactor', default=0.5)
 
     dataBasePath = readCfgParam(cfg, 'paths', 'dataBase', default='../data/')
-    imgsPklFileName = '{}linemod_imgs_synth_and_{}test_norm_s{}_i{}_o{}.pkl'.format(
-        dataBasePath, fixedNumTrain, targetSize, modeStrs[inputMode], nSeqs)
-    trainSetPklFileName = '{}linemod_synth_and_{}test_s{}_{}_n{}_o{}_train.pkl'.format(
-        dataBasePath, fixedNumTrain, targetSize, modeStrs[inputMode], numNoisyTrainCopies, nSeqs)
-    valSetPklFileName = '{}linemod_synth_and_{}test_s{}_{}_n{}_o{}_val.pkl'.format(
-        dataBasePath, fixedNumTrain, targetSize, modeStrs[inputMode], numNoisyTrainCopies, nSeqs)
+    print("dataBasePath = {}".format(dataBasePath))
+
+    ds = readCfgParam(cfg, 'paths', 'dataSet', default='dataset')
+    print("dataSet = {}".format(ds))
+
+    imgsPklFileName = '{}{}_imgs_synth_and_{}test_norm_s{}_i{}_o{}.pkl'.format(
+        dataBasePath, ds, fixedNumTrain, targetSize, modeStrs[inputMode], nSeqs)
+    trainSetPklFileName = '{}{}_synth_and_{}test_s{}_{}_n{}_o{}_train.pkl'.format(
+        dataBasePath, ds, fixedNumTrain, targetSize, modeStrs[inputMode], numNoisyTrainCopies, nSeqs)
+    valSetPklFileName = '{}{}_synth_and_{}test_s{}_{}_n{}_o{}_val.pkl'.format(
+        dataBasePath, ds, fixedNumTrain, targetSize, modeStrs[inputMode], numNoisyTrainCopies, nSeqs)
 
     cfg.set('input', 'imgsPklFileName', imgsPklFileName)
     cfg.set('train', 'trainSetPklFileName', trainSetPklFileName)
@@ -1198,6 +1204,7 @@ def prepareData(cfg, rng):
 
     lmDataBasepath = readCfgParam(
         cfg, 'paths', 'lmDataBase', default='/home/wohlhart/work/data/linemod/')
+    print("lmDataBasepath = {}".format(lmDataBasepath))
 
     # DEBUG
 #     patch0 = trainSeqs['bowl'].data[1]
@@ -1209,20 +1216,17 @@ def prepareData(cfg, rng):
 
     loadTrainSetFromPkl = True
     if loadTrainSetFromPkl and os.path.isfile(trainSetPklFileName):
-
-        print ('Loading train_set from pkl {}'.format(trainSetPklFileName))
+        print('Loading train_set from pkl {}'.format(trainSetPklFileName))
         pklload_start_time = time.clock()
 
         train_set = BatchedDataset.loadFromPkl(trainSetPklFileName)
         val_set = BatchedDataset.loadFromPkl(valSetPklFileName)
 
         pklload_end_time = time.clock()
-
-        print ('Loading train_set took %.1fs' %
-               ((pklload_end_time - pklload_start_time)))
+        print('Loading train_set took %.1fs' %
+              ((pklload_end_time - pklload_start_time)))
 
     else:
-
         loadImgsFromPkl = True
         if (not loadImgsFromPkl) or (not os.path.isfile(imgsPklFileName)):
             if loadImgsFromPkl:
@@ -1234,11 +1238,18 @@ def prepareData(cfg, rng):
                 lmDataBasepath, targetSize, inputMode, trainSplitFactor=trainSplitFactor, fixedNumTrain=fixedNumTrain, seqNames=seqNames, zRotInv=zRotInv)
             load_end_time = time.clock()
 
+#             # DEBUG # TODO(duboisf)
+#             testSeqs_values = testSeqs.values()  # list length 3
+#             placeholder_seq = testSeqs_values[0]
+#             placeholder_patch = placeholder_seq[1][0]
+#             print("relCamOrient = {}".format(
+#                 placeholder_patch.frame.pose.relCamOrient))
+
             f = open(imgsPklFileName, 'wb')
             cPickle.dump(
                 (tmplSeqs, trainSeqs, testSeqs), f, protocol=cPickle.HIGHEST_PROTOCOL)
             f.close()
-            print ('Creating took %.1fs' % ((load_end_time - load_start_time)))
+            print('Creating took %.1fs' % ((load_end_time - load_start_time)))
 
         else:
             print("Loading images from pkl '{}' ... ".format(imgsPklFileName))
@@ -1249,8 +1260,8 @@ def prepareData(cfg, rng):
             f.close()
             pklload_end_time = time.clock()
 
-            print ('Loading took %.1fs' %
-                   ((pklload_end_time - pklload_start_time)))
+            print('Loading took %.1fs' %
+                  ((pklload_end_time - pklload_start_time)))
 
         create_start_time = time.clock()
 
@@ -1346,7 +1357,6 @@ def prepareData(cfg, rng):
 
 
 def createNetwork(rng, cfg, train_set, graphOutFile=None):
-    print("create network")
     outputDescrLen = readCfgIntParam(cfg, 'net', 'outputDescrLen', default=3)
 
     targetSize = readCfgIntParam(cfg, 'input', 'targetSize', default=64)
@@ -1390,8 +1400,6 @@ def createNetwork(rng, cfg, train_set, graphOutFile=None):
 
 
 def createTrainer(rng, cfg, descrNet, train_set, val_set, dataManager, resPath):
-
-    print("setup trainer")
     nTrainSamples = train_set.numSamples
     nTrainBatches = nTrainSamples / train_set.batchSize
     pairsAvailable = train_set.pairIdx is not None

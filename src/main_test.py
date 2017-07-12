@@ -66,7 +66,7 @@ def debugTestDataset(lmDataset):
     showLinemodFrame(frame)
 
 
-def loadTmplSeqsBatchedDataset(lmDataBasepath, targetSize=64, batchSize=300, inputMode=0, seqNames=None, zRotInv=None):
+def loadTmplSeqsBatchedDataset(lmDataBasepath, targetSize=64, batchSize=300, inputMode=0, seqNames=None, zRotInv=None, linemodTmplDataPklFilename=None):
 
     # floatX = theano.config.floatX  # @UndefinedVariable
 
@@ -75,8 +75,9 @@ def loadTmplSeqsBatchedDataset(lmDataBasepath, targetSize=64, batchSize=300, inp
         #zRotInv = (False,True,False,False)
         zRotInv = (0, 1, 0, 0)
 
-    linemodTmplDataPklFilename = "../data/linemod_tmpldata_o{}_i{}_s{}_bs{}.pkl".format(
-        len(seqNames), inputMode, targetSize, batchSize)
+    if linemodTmplDataPklFilename is None:
+        linemodTmplDataPklFilename = "../data/linemod_tmpldata_o{}_i{}_s{}_bs{}.pkl".format(
+            len(seqNames), inputMode, targetSize, batchSize)
 
     loadFromPkl = True
     if loadFromPkl and (os.path.isfile(linemodTmplDataPklFilename)):
@@ -272,7 +273,6 @@ def linemod_test_main(fileName=None, cfg=None):
     descrNet = trainRes[0]
     cfg = trainRes[2]
     descrNetTrainerParams = trainRes[3]
-    #
 
     imgsPklFileName = readCfgParam(cfg, 'input', 'imgsPklFileName', default="")
     trainSetPklFileName = readCfgParam(
@@ -337,7 +337,7 @@ def linemod_test_main(fileName=None, cfg=None):
     f.close()
     pklload_end_time = time.clock()
     print ('Loading took %.1fs' % ((pklload_end_time - pklload_start_time)))
-
+# duboisf
 #     # duboisf: Add intruder images!!!!!!!!!
 #     my_image_dir_path = "/home/duboisf/Documents/Semester_thesis/datasets/kinect2/duck_one_revolution_cropped/"
 #     my_image_file_names = os.listdir(my_image_dir_path)
@@ -359,72 +359,89 @@ def linemod_test_main(fileName=None, cfg=None):
 #     #del testSeqs['bowl']
 #     #del testSeqs['glue']
 
-    # Remove all but first n_linemod_test_samples data patches.
-    n_test_samples = 10
-    n_own_test_samples = 5
-    n_linemod_test_samples = n_test_samples - n_own_test_samples
-    del(testSeqs['duck'].data[n_linemod_test_samples - 1:-1])
-
-    add_my_own = True
-
-    if (add_my_own and n_own_test_samples > 0):
-        # Copy patch for structure.
-        patch_tmpl = testSeqs['duck'].data[0]
-
-        image_dir_path = "/home/duboisf/Documents/Semester_thesis/datasets/kinect2/2017-04-26_17:28"
-        color_images, depth_images = preprocessMyTestImages(image_dir_path)
-
-        # Prepend my own images from disk.
-        print("Adding new unseen images...........")
-        my_test_samples = []
-        for i in range(n_own_test_samples):
-            # Contruct new Patch.
-            patch_i = Patch(img=color_images[i],
-                            dpt=numpy.squeeze(depth_images[i]),
-                            mask=None,
-                            frame=patch_tmpl.frame,
-                            cropArea=patch_tmpl.cropArea)
-#             patch_i.frame.className = "duck"
-#             patch_i.img = color_images[i]
-#             patch_i.dpt = numpy.squeeze(depth_images[i])
-            my_test_samples.append(patch_i)
-        testSeqs['duck'].data[:0] = my_test_samples
-
-    # Remove all but first patch.
-    del(testSeqs['bowl'].data[0:-1])
-    del(testSeqs['glue'].data[0:-1])
-
-    # View a sample patch.
-    patchApe = testSeqs['duck'].data[0]
-    print("class name: {}".format(patchApe.frame.className))
-    print("frame name: {}".format(patchApe.frame.filename))
-    print("-cropArea: {}".format(patchApe.cropArea))
-    print(
-        "Frame-img  min,max: {},{}".format(numpy.min(patchApe.img), numpy.max(patchApe.img)))
-    print(
-        "Frame-dpt  min,max: {},{}".format(numpy.min(patchApe.dpt), numpy.max(patchApe.dpt)))
-    cv2.imshow("-img", patchApe.img + 0.5)
-    cv2.imshow("-dpt/2+1", patchApe.dpt / 2.0 + 1.0)
-    cv2.imshow("-dpt/2+0.5", patchApe.dpt / 2.0 + 0.5)
-    cv2.imshow("-dpt", patchApe.dpt)
-    cv2.waitKey()
-    cv2.destroyAllWindows()
-
+#     # Remove all but first n_linemod_test_samples data patches.
+#     n_test_samples = 1
+#     n_own_test_samples = 1
+#     n_linemod_test_samples = n_test_samples - n_own_test_samples
+#     del(testSeqs['duck'].data[n_linemod_test_samples - 1:-1])
+#
+#     add_my_own = True
+#
+#     if (add_my_own and n_own_test_samples > 0):
+#         # Copy patch for structure.
+#         patch_tmpl = testSeqs['duck'].data[0]
+#
+#         image_dir_path = "/home/duboisf/Documents/Semester_thesis/datasets/kinect2/2017-04-26_17:28"
+#         color_images, depth_images = preprocessMyTestImages(image_dir_path)
+#
+#         # Prepend my own images from disk.
+#         print("Adding new unseen images...........")
+#         my_test_samples = []
+#         for i in range(n_own_test_samples):
+#             # Contruct new Patch.
+#             patch_i = Patch(img=color_images[i],
+#                             dpt=numpy.squeeze(depth_images[i]),
+#                             mask=None,
+#                             frame=patch_tmpl.frame,
+#                             cropArea=patch_tmpl.cropArea)
+# #             patch_i.frame.className = "duck"
+# #             patch_i.img = color_images[i]
+# #             patch_i.dpt = numpy.squeeze(depth_images[i])
+#             my_test_samples.append(patch_i)
+#         testSeqs['duck'].data[:0] = my_test_samples
+#
+#     # Remove all but first patch.
+# #     del(testSeqs['bowl'].data[0:-1])
+#     del(testSeqs['bowl'])
+# #     del(testSeqs['glue'].data[0:-1])
+#     del(testSeqs['glue'])
+#
+#     # View a sample patch.
+#     patchApe = testSeqs['duck'].data[0]
+#     print("class name: {}".format(patchApe.frame.className))
+#     print("frame name: {}".format(patchApe.frame.filename))
+#     print("-cropArea: {}".format(patchApe.cropArea))
+#     print(
+#         "Frame-img  min,max: {},{}".format(numpy.min(patchApe.img), numpy.max(patchApe.img)))
+#     print(
+#         "Frame-dpt  min,max: {},{}".format(numpy.min(patchApe.dpt), numpy.max(patchApe.dpt)))
+#     cv2.imshow("-img", patchApe.img + 0.5)
+#     cv2.imshow("-dpt/2+1", patchApe.dpt / 2.0 + 1.0)
+#     cv2.imshow("-dpt/2+0.5", patchApe.dpt / 2.0 + 0.5)
+#     cv2.imshow("-dpt", patchApe.dpt)
+#     cv2.waitKey()
+#     cv2.destroyAllWindows()
+# duboisf
     # print("###### bs {}".format(descrNet.cfgParams.batch_size))
     testdata_set = BatchedImgSeqDataset()
     testdata_set.initFromImgSeqs(
         testSeqs, inputMode=inputMode, batchSize=descrNet.cfgParams.batch_size)
 
     # test it
-    img0 = numpy.concatenate([x[0] for x in testdata_set.x], axis=0) if isinstance(
-        testdata_set.x, list) else testdata_set.x[0]
+#     print(isinstance(testdata_set.x, list))
+#     print(testdata_set.x[0].shape)
+#     print(testdata_set.x[1].shape)
+    img0 = testdata_set.x[0][1, :, :, :]
     img0 = numpy.swapaxes(numpy.swapaxes(img0, 0, 1), 1, 2)
+    dpt0 = testdata_set.x[1][1, :, :, :]
+    dpt0 = numpy.swapaxes(numpy.swapaxes(dpt0, 0, 1), 1, 2)
+#     img0 = numpy.concatenate([x[0] for x in testdata_set.x[0]], axis=0) if isinstance(
+#         testdata_set.x, list) else testdata_set.x[0]
+#     img0 = numpy.swapaxes(numpy.swapaxes(img0, 0, 1), 1, 2)
+#     dpt0 = numpy.concatenate([x[1] for x in testdata_set.x[1]], axis=0) if isinstance(
+#         testdata_set.x, list) else testdata_set.x[1]
+#     dpt0 = numpy.swapaxes(numpy.swapaxes(dpt0, 0, 1), 1, 2)
+
     print("img0-min = {}".format(numpy.min(img0)))
     print("img0-max = {}".format(numpy.max(img0)))
     print("img0-shape: " + str(img0.shape))
+    print("dpt0-min = {}".format(numpy.min(dpt0)))
+    print("dpt0-max = {}".format(numpy.max(dpt0)))
+    print("dpt0-shape: " + str(dpt0.shape))
     if showPlots:
         # !!!! zero-mean? no, just for brightness
         cv2.imshow("img0", img0 + 0.5)
+        cv2.imshow("dpt0", dpt0 / 2.0 + 0.5)
     cv2.waitKey()
     cv2.destroyAllWindows()
 
@@ -582,52 +599,52 @@ def linemod_test_main(fileName=None, cfg=None):
     # smallest and biggest distances
     print("Smallest distance = {}".format(numpy.min(dst)))
     print("Largest distance  = {}".format(numpy.max(dst)))
-
-    # pick best matching template index
-    best_match_tmp_idx = numpy.argmin(dst, axis=1)
-
-    for test_idx, tmpl_idx in zip(range(dst.shape[0]), best_match_tmp_idx):
-        print("#{}".format(test_idx))
-        test_valid_idx = testDataValidIdx[test_idx]
-        tmp_valid_idx = tmplDataValidIdx[tmpl_idx]
-
-        # Show test image.
-        test_img = testdata_set.x[0][test_valid_idx, :, :, :]
-        test_dpt = testdata_set.x[1][test_valid_idx, :, :, :]
-        cv2.imshow("test image-color",
-                   numpy.rollaxis(test_img + 0.5, 0, 3))
-        cv2.imshow("test image-depth",
-                   numpy.rollaxis(test_dpt / 2.0 + 1.0, 0, 3))
-
-        print("Test image\t min={}, max={}".format(
-            numpy.min(test_img), numpy.max(test_img)))
-        print("Test depth\t min={}, max={}".format(
-            numpy.min(test_dpt), numpy.max(test_dpt)))
-
-        # Show template image.
-        tmpl_img = tmpl_set.x[0][tmp_valid_idx, :, :, :]
-        tmpl_dpt = tmpl_set.x[1][tmp_valid_idx, :, :, :]
-        cv2.imshow("template image-color",
-                   numpy.rollaxis(tmpl_img + 0.5, 0, 3))
-        cv2.imshow("template image-depth",
-                   numpy.rollaxis(tmpl_dpt / 2.0 + 1.0, 0, 3))
-
-        print("Template image\t min={}, max={}".format(
-            numpy.min(tmpl_img), numpy.max(tmpl_img)))
-        print("Template depth\t min={}, max={}".format(
-            numpy.min(tmpl_dpt), numpy.max(tmpl_dpt)))
-
-        # Show template descriptor.
-        print("Template descriptor = {}".format(tmplDescrs[tmpl_idx]))
-
-        # Show template class.
-        print("Template class = {}".format(tmplLabels[tmpl_idx]))
-
-        # Show template pose (trans + rot).
-        print("Template rot = {}\n".format(tmplRots[tmpl_idx]))
-
-        cv2.waitKey()
-
+# duboisf
+#     # pick best matching template index
+#     best_match_tmp_idx = numpy.argmin(dst, axis=1)
+#
+#     for test_idx, tmpl_idx in zip(range(dst.shape[0]), best_match_tmp_idx):
+#         print("#{}".format(test_idx))
+#         test_valid_idx = testDataValidIdx[test_idx]
+#         tmp_valid_idx = tmplDataValidIdx[tmpl_idx]
+#
+#         # Show test image.
+#         test_img = testdata_set.x[0][test_valid_idx, :, :, :]
+#         test_dpt = testdata_set.x[1][test_valid_idx, :, :, :]
+#         cv2.imshow("test image-color",
+#                    numpy.rollaxis(test_img + 0.5, 0, 3))
+#         cv2.imshow("test image-depth",
+#                    numpy.rollaxis(test_dpt / 2.0 + 1.0, 0, 3))
+#
+#         print("Test image\t min={}, max={}".format(
+#             numpy.min(test_img), numpy.max(test_img)))
+#         print("Test depth\t min={}, max={}".format(
+#             numpy.min(test_dpt), numpy.max(test_dpt)))
+#
+#         # Show template image.
+#         tmpl_img = tmpl_set.x[0][tmp_valid_idx, :, :, :]
+#         tmpl_dpt = tmpl_set.x[1][tmp_valid_idx, :, :, :]
+#         cv2.imshow("template image-color",
+#                    numpy.rollaxis(tmpl_img + 0.5, 0, 3))
+#         cv2.imshow("template image-depth",
+#                    numpy.rollaxis(tmpl_dpt / 2.0 + 1.0, 0, 3))
+#
+#         print("Template image\t min={}, max={}".format(
+#             numpy.min(tmpl_img), numpy.max(tmpl_img)))
+#         print("Template depth\t min={}, max={}".format(
+#             numpy.min(tmpl_dpt), numpy.max(tmpl_dpt)))
+#
+#         # Show template descriptor.
+#         print("Template descriptor = {}".format(tmplDescrs[tmpl_idx]))
+#
+#         # Show template class.
+#         print("Template class = {}".format(tmplLabels[tmpl_idx]))
+#
+#         # Show template pose (trans + rot).
+#         print("Template rot = {}\n".format(tmplRots[tmpl_idx]))
+#
+#         cv2.waitKey()
+# duboisf
     # calculate similarity of poses of train sample and templates of the
     # sample class
     sims = []

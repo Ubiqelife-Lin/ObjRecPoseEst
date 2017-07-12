@@ -211,9 +211,10 @@ def visFilterMontageOfLayer(wvals, fileName=None, windowName=None):
 #     print("targetAspect = {}".format(targetAspect))
 #     print("numFilters = {}".format(numFilters))
 
-    numCols = numpy.floor(numpy.sqrt(numFilters * targetAspect / filterAspect))
+    numCols = int(
+        numpy.floor(numpy.sqrt(numFilters * targetAspect / filterAspect)))
     numCols = numpy.maximum(numCols, 1)
-    numRows = numpy.ceil(numFilters / float(numCols))
+    numRows = int(numpy.ceil(numFilters / float(numCols)))
 
 #     print("numCols = {}".format(numCols))
 #     print("numRows = {}".format(numRows))
@@ -715,6 +716,8 @@ def vis3DDescriptorsWithRot(descrs, labels, rots, fileName=None, tikzFileName=No
 
     x = rots[:, 0]
     y = rots[:, 1]
+    print("rots_min = {}, rots_max = {}".format(
+        numpy.min(rots[:, 2]), numpy.max(rots[:, 2])))
     z = -rots[:, 2]
     az = numpy.arctan2(y, x).reshape(numPts, 1)
     sq = numpy.sqrt(x**2 + y**2)
@@ -732,6 +735,7 @@ def vis3DDescriptorsWithRot(descrs, labels, rots, fileName=None, tikzFileName=No
             z = descrs[idx, 2]
         else:
             z = numpy.zeros((numpy.sum(idx),))
+
         ax.scatter3D(
             descrs[idx, 0], descrs[idx, 1], z, c=colors[idx], marker=markers[i])
         # for j in (idx.nonzero()[0]):
@@ -1180,6 +1184,7 @@ def visClosestTmpls(testdata_set, tmpl_set, dst, fileName=None, showPlot=True):
         img = testdata_set.x[0]
     print("img.shape {}".format(img.shape))
     nChan, h, w = img.shape
+    print("nChan,h,w = {},{},{}".format(nChan, h, w))
     if nChan == 1:
         dbgImg = numpy.zeros((h * nSamp, w + b + w * nTmpl), dtype=img.dtype)
     elif nChan == 3:
@@ -1188,8 +1193,6 @@ def visClosestTmpls(testdata_set, tmpl_set, dst, fileName=None, showPlot=True):
     else:
         dbgImg = numpy.zeros(
             (h * nSamp, 2 * w + b + 2 * w * nTmpl, 3), dtype=img.dtype)
-
-    print("h,w {}".format(h, w))
 
     #validSampIdx, = (testdata_set.y >= 0).nonzero()
     # choose wisely
@@ -1226,7 +1229,12 @@ def visClosestTmpls(testdata_set, tmpl_set, dst, fileName=None, showPlot=True):
             img = numpy.rollaxis(numpy.rollaxis(testdata[j], 2), 2)
             rgbImg = img[:, :, 0:3] + 0.5
             dbgImg[h * j:h * (j + 1), 0:w, :] = rgbImg
+            # TODO (duboisf)
+            print('dpt-min = {}'.format(numpy.min(img[:, :, 3])))
+            print('dpt-max = {}'.format(numpy.max(img[:, :, 3])))
             dImg = img[:, :, 3] / 2. + 0.5
+            print('dImg-min = {}'.format(numpy.min(dImg)))
+            print('dImg-max = {}\n'.format(numpy.max(dImg)))
             dImg = numpy.tile(dImg.reshape((h, w, 1)), (1, 1, 3))
             dbgImg[h * j:h * (j + 1), w:2 * w, :] = dImg
 

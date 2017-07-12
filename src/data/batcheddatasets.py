@@ -65,6 +65,8 @@ class BatchedImgSeqDataset(BatchedDataset):
         # unused space in last minibatch must be filled with label=-1
         allLabels = -numpy.ones((numBatches * batchSize,), dtype=numpy.int32)
         allRots = numpy.zeros((numBatches * batchSize, 3), dtype=numpy.float32)
+        allOrients = numpy.zeros(
+            (numBatches * batchSize, 9), dtype=numpy.float32)
         allSampIdx = numpy.zeros((numBatches * batchSize,), dtype=numpy.int32)
 
         zRotInv = -numpy.ones((len(imgSeqs),), dtype=numpy.int32)
@@ -78,6 +80,8 @@ class BatchedImgSeqDataset(BatchedDataset):
                     ad[k] = imd
                 allLabels[k] = i
                 allRots[k] = patch.frame.pose.relCamPosZRotInv
+                allOrients[k] = numpy.reshape(
+                    patch.frame.pose.relCamOrientZRotInv, (1, 9))
                 if zRotInv[i] < 0:
                     zRotInv[i] = patch.frame.pose.zRotInv
                 elif zRotInv[i] != patch.frame.pose.zRotInv:
@@ -90,6 +94,7 @@ class BatchedImgSeqDataset(BatchedDataset):
                       'sampIdx': allSampIdx,
                       'tmplBatchDataStartIdx': None,
                       'rots': allRots,
+                      'orients': allOrients,
                       'tmplRots': None,
                       'trainRots': None,
                       'zRotInv': zRotInv}

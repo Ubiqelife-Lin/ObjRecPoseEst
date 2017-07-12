@@ -25,7 +25,7 @@ from data.camera import LinemodCam, BlenderCam
 
 class LinemodImporter(object):
     '''
-    provide functionality to load data from the Linemod dataset  
+    provide functionality to load data from the Linemod dataset
     '''
 
     def __init__(self, basepath):
@@ -56,10 +56,19 @@ class LinemodImporter(object):
                     numpy.float32) / 10.  # make it cm, as everything else is in cm now
 
         elif ext == ".png":
-
             data = cv2.imread(filename, cv2.IMREAD_UNCHANGED).astype(
-                numpy.float32) / 10.
+                numpy.float32)
+#             print(
+#                 'data min/max = {}/{}'.format(numpy.min(data), numpy.max(data)))
+            # [mm] in Linemod case TODO(duboisf) !!
+            if numpy.max(data) > 10000:
+                data *= 200. / \
+                    2**16.  # first in blender we expressed everything in dm (ie 1unit = 10cm), then we mapped 0..20 -> 0..1, then blender fills the the 16bit up. image is scaled to 0..1 -> 0..2^16
+            else:
+                data /= 10.  # convert from mm to cm
 
+            if len(data.shape) > 2:
+                data = data[:, :, 0]
         else:
             raise ValueError("Unkown depth image file format '{}'".format(ext))
 
@@ -82,8 +91,11 @@ class LinemodImporter(object):
 
     def loadSequence(self, seqName, zRotInv=0, inputMode=2, cropAtGtPos=False, cropSize=None, targetSize=None, imgNums=None):
 
+        debug = False  # TODO !!
+
         objdir = '{}{}/data/'.format(self.basepath, seqName)
-        s = '{}color*.jpg'.format(objdir, self.basepath, seqName)
+        print("Images used for testing under: {}".format(objdir))
+        s = '{}color*'.format(objdir, self.basepath, seqName)
 
         imgFileNames = glob.glob(s)
         imgFileNames = sorted(imgFileNames)
@@ -99,7 +111,7 @@ class LinemodImporter(object):
 
         print("inputMode {}".format(inputMode))
 
-        txt = 'Loading {}'.format(seqName)
+        txt = 'Loading {} '.format(seqName)
         pbar = pb.ProgressBar(
             maxval=len(imgFileNames), widgets=[txt, pb.Percentage(), pb.Bar()])
         pbar.start()
@@ -116,27 +128,79 @@ class LinemodImporter(object):
             dptFileName = '{}inp/depth{}.png'.format(objdir, numStr)
             rotFileName = '{}rot{}.rot'.format(objdir, numStr)
             traFileName = '{}tra{}.tra'.format(objdir, numStr)
+            # DEBUG
+            if debug:
+                print("\nimgFileName = {}".format(imgFileName))
+                print("dptFileName = {}".format(dptFileName))
+                print("rotFileName = {}".format(rotFileName))
+                print("traFileName = {}".format(traFileName))
 
             if (inputMode > 0):
                 img = self.loadImage(imgFileName)
+                # DEBUG
+                if debug:
+                    print("color-min = {}".format(numpy.min(img)))
+                    print("color-max = {}".format(numpy.max(img)))
+                    cv2.imshow("full color{}.png".format(numStr), img + 0.5)
             else:
                 img = None
             if (inputMode != 1):
-                dpt = self.loadDepthMap(dptFileName)
+                dpt = self.loadDepthMap(dptFileName)  # I guess in [cm]
+                # DEBUG
+                if debug:
+                    print("depth-min = {}".format(numpy.min(dpt)))
+                    print("depth-max = {}".format(numpy.max(dpt)))
+                    cv2.imshow(
+                        "full depth{}.png".format(numStr), dpt / 200.0)
+
             else:
                 dpt = None
             mask = None  # or numpy.ones with the size of img?
             rot = self.loadMatFromTxt(rotFileName)
-            tra = self.loadMatFromTxt(traFileName)
+            tra = self.loadMatFromTxt(traFileName)  # in [cm]
+            # DEBUG
+            if debug:
+                print("rotation = {}".format(rot))
+                print("translation = {}".format(tra))
 
             # data.append({img:img,dpt:dpt,rot:rot,tra:tra})
             pose = LinemodObjPose(rot=rot, tra=tra, zRotInv=zRotInv)
             frame = LinemodTestFrame(
                 img=img, dpt=dpt, mask=mask, pose=pose, className=seqName, filename=dptFileName)
+
+#             # DEBUG TODO(duboisf)
+#             print(frame.pose.relCamPos)
+#             print(frame.pose.getMatrix)
+#             print(frame.pose.relCamOrient)
+#             cv2.waitKey()
+
+#             # DEBUG
+#             print("rcp = {}".format(frame.pose.relCamPos))
+#             print("mat = {}".format(frame.pose.getMatrix()))
+
             if cropAtGtPos:
                 patch = self.cropPatchAtGTPos(
                     frame, cropSize, targetSize, inputMode)
+
+                # DEBUG
+                if debug:
+                    cv2.imshow("-img", patch.img + 0.5)
+                    print("patch-color min/max = {}/{}".format(numpy.min(patch.img),
+                                                               numpy.max(patch.img)))
+    #                 cv2.imshow("-1dpt/2+1", patch.dpt / 2.0 + 1.0)
+    #                 cv2.imshow("-2dpt/2+0.5", patch.dpt / 2.0 + 0.5)
+    #                 cv2.imshow("-3dpt", patch.dpt)
+                    print("patch-depth min/max = {}/{}".format(numpy.min(patch.dpt),
+                                                               numpy.max(patch.dpt)))
+                    cv2.waitKey()
+                    cv2.destroyAllWindows()
+
                 #print("patch mn/mx {},{}".format(numpy.min(patch),numpy.max(patch)))
+#                 # DEBUG
+#                 print(type(patch.frame.pose))
+#                 print(patch.frame.pose.relCamOrient)
+#                 cv2.waitKey()
+
                 data.append(patch)
                 # keep only the first few full frames for debugging
                 if i > 10:
@@ -145,7 +209,9 @@ class LinemodImporter(object):
                     frame.mask = None
             else:
                 data.append(frame)
+
             pbar.update(i)
+        pbar.finish()
 
         return NamedImgSequence(seqName, data)
 
@@ -153,13 +219,32 @@ class LinemodImporter(object):
 
         lcam = LinemodCam()
 
+        debug = False  # TODO !!
+
+        # camera translation from origin to where it is in camera frame
         rcp = frame.pose.relCamPos
-        mat = frame.pose.getMatrix()
-        worldPt = numpy.array([0, 0, -5, 1.])
+        mat = frame.pose.getMatrix()  # T_CO
+        if debug:
+            print("rcp ={}".format(rcp))
+            print("mat ={}".format(mat))
+
+        # distinguish btw Blender fixed and LineMOD fixed coordinate system !!
+        if rcp[2] > 0:  # Blender setup
+            #             print('Blender setup')
+            worldPt = numpy.array([0, 0, 0, 1.])  # O_t_OC
+        else:  # LineMOD setup
+            #             print('LineMOD setup')
+            worldPt = numpy.array([0, 0, -5, 1.])  # O_t_OC
+
         camPt = numpy.dot(mat, worldPt)  # center pt in camera space
-        screenPt = lcam.worldToScreen(camPt)
+        screenPt = lcam.worldToScreen(camPt)  # (col, row)
+        if debug:
+            print("worldPt ={}".format(worldPt))
+            print("camPt ={}".format(camPt))
+            print("screenPt ={}".format(screenPt))
 
         v = camPt[0:3]   # vector cam center - object center in cam space
+#         print("vector(cam-center-->object-center in cam space): {}".format(v))
 
         # looking down from exactly on top -> cannot do the cross product with
         # the z axis
@@ -181,20 +266,22 @@ class LinemodImporter(object):
                 r = numpy.array(
                     [v[1] * v[1] + v[2] * v[2], -v[0] * v[1], -v[0] * v[2]])
             else:
-                upV = (
-                    numpy.dot(mat, numpy.array([0, 0, -6, 1.])) - camPt)[0:3]
+                # distinguish btw Blender fixed and LineMOD fixed coord system
+                # !!
+                if rcp[2] > 0:
+                    upV = (
+                        numpy.dot(mat, numpy.array([0, 0, 1, 1.])) - camPt)[0:3]
+                else:
+                    upV = (
+                        numpy.dot(mat, numpy.array([0, 0, -6, 1.])) - camPt)[0:3]
                 r = numpy.cross(v, upV)
                 u = numpy.cross(r, v)
 
-#         if debug:
-#             print("m {}".format(mat))
-#             print("w {}".format(worldPt))
-#             print("c {}".format(camPt))
-#             print("s {}".format(screenPt))
-#             print("v {}".format(v))
-#             print("u {}".format(u))
-#             print("r {}".format(r))
-#             print("rcp {}".format(rcp))
+            if debug:
+                print("upV {}".format(upV))
+                print("v {}".format(v))
+                print("u {}".format(u))
+                print("r {}".format(r))
 
         # normalize, resize
         u = u * (cropSize / 2) / numpy.linalg.norm(u)
@@ -372,6 +459,8 @@ class LinemodTrainDataImporter(object):
 
         floatX = theano.config.floatX  # @UndefinedVariable
 
+        debug = False  # TODO !!
+
         if cropSize is None:
             cropSize = 20.0  # 28.
         if targetSize is None:
@@ -384,6 +473,7 @@ class LinemodTrainDataImporter(object):
         camPositionsElAz = numpy.loadtxt(
             self.basePath + 'camPositionsElAz.txt')
         camOrientations = numpy.loadtxt(self.basePath + 'camOrientations.txt')
+        camDistances = numpy.loadtxt(self.basePath + 'camDistances.txt')
         if camOrientations.ndim < 2:
             camOrientations = camOrientations.reshape(
                 (len(camOrientations) / 2, 2))
@@ -393,7 +483,9 @@ class LinemodTrainDataImporter(object):
             camPositionsElAz, camOrientations.shape[0], axis=0)
         camOrientations = numpy.tile(camOrientations, (numCams, 1))
         numCams = len(camElAz)
-        camDist = 40.  # cm, TODO adjust for other objects ?
+        # cm!, TODO adjust for other objects ? TODO(duboisf)
+        camDist = camDistances * 10  # = 40. #cm TODO !!!!!!
+        print("camDist = {}".format(camDist))
 
         if zRotInv == 1:
             # if it is fully rotationally symmetric, the azimuth is always 0
@@ -405,7 +497,7 @@ class LinemodTrainDataImporter(object):
         #raise ValueError("path {}".format(path))
 
         pat = "{}img*.png".format(path)
-        print("looking for " + pat)
+        print("Looking for " + pat)
         d = sorted(glob.glob(pat))
 
         assert numCams == len(d), "hey! {} != {}".format(numCams, len(d))
@@ -416,7 +508,7 @@ class LinemodTrainDataImporter(object):
             camElAz = [camElAz[i, :] for i in imgNums]
             camOrientations = [camOrientations[i, :] for i in imgNums]
 
-        txt = "loading {}".format(objName)
+        txt = "Loading {} ".format(objName)
         pbar = pb.ProgressBar(
             maxval=len(d), widgets=[txt, pb.Percentage(), pb.Bar()])
         pbar.start()
@@ -429,7 +521,10 @@ class LinemodTrainDataImporter(object):
 
             imgFileName = fileName
             dptFileName = "{}dpt{}".format(path, fnroot)
-            maskFileName = "{}mask{}".format(path, fnroot)
+            if debug:
+                print(imgFileName)
+                print(dptFileName)
+# maskFileName = "{}mask{}".format(path, fnroot) # duboisf: neglected
 
             #print("files: {}, {}".format(imgFileName,dptFileName))
 
@@ -440,15 +535,18 @@ class LinemodTrainDataImporter(object):
             if len(dptrData.shape) > 2:
                 dptrData = dptrData[:, :, 0]
 
+#             print("dptrData min/max = {}/{}".format(numpy.min(dptrData),
+#                                                     numpy.max(dptrData)))
             dptrData *= 200. / \
                 2**16.  # first in blender we expressed everything in dm (ie 1unit = 10cm), then we mapped 0..20 -> 0..1, then blender fills the the 16bit up. image is scaled to 0..1 -> 0..2^16
-
-            maskData = cv2.imread(
-                maskFileName, cv2.IMREAD_UNCHANGED).astype(numpy.float32)
+#             print("AFTER dptrData min/max = {}/{}".format(numpy.min(dptrData),
+#                                                           numpy.max(dptrData)))
+#             maskData = cv2.imread(
+#                 maskFileName, cv2.IMREAD_UNCHANGED).astype(numpy.float32)
             #print("maskData mn/mx {},{}".format(numpy.min(maskData),numpy.max(maskData)))
             # cv2.imshow("maskData",maskData/(2**16.))
             #raise ValueError("ok")
-            maskData = (maskData < (2**16. - 5)).astype(numpy.uint8)
+#             maskData = (maskData < (2**16. - 5)).astype(numpy.uint8)
             # cv2.imshow("maskData2",maskData)
             # cv2.waitKey(0)
             #raise ValueError("ok")
@@ -457,12 +555,14 @@ class LinemodTrainDataImporter(object):
             #print("dptrData min {}, max {}".format(dptrData.min(),dptrData.max()))
 
             # DEBUG print value of center pixel
-            #h,w = dptrData.shape
-            # print dptrData[h/2,w/2]
+            #h, w = dptrData.shape
+            # print dptrData[h / 2, w / 2]
 
             # DEBUG show
-            # dptRendered = Image.fromarray(dptrData*255./8.) # to show it we scale from 0..8 to 0..255, everything beyond 8 is cut away (saturated)
-            # dptRendered.show('rendered')
+            # to show it we scale from 0..8 to 0..255, everything beyond 8 is
+            # cut away (saturated)
+#             dptRendered = Image.fromarray(dptrData * 255. / 8.)
+#             dptRendered.show('rendered')
 
             # self.cropPatchFromDptAndImg(dptrData,dptrData,(320,240),3.)
 
@@ -495,11 +595,24 @@ class LinemodTrainDataImporter(object):
                     "Shit just got real: rcp={} != camP={}".format(rcp, camP))
 
             frame = Frame(
-                imgData, dptrData, maskData, pose, objName, imgFileName)
+                imgData, dptrData, None, pose, objName, imgFileName)
             #dptPatch,imgPatch = self.cropPatchFromDptAndImg(dptrData,imgData,(320,240),cropSize,targetSize,fixedD=4.0)
             # seqData.append(Frame(imgPatch,dptPatch,pose,objName,imgFileName))
             patch = self.cropPatchFromFrame(
                 frame, (320, 240), cropSize, targetSize, fixedD=camDist)
+
+            # DEBUG TODO(duboisf)
+            if debug:
+                # Display sample patch.
+                cv2.imshow("-img", patch.img + 0.5)
+                print("color min/max = {}/{}".format(numpy.min(patch.img),
+                                                     numpy.max(patch.img)))
+                cv2.imshow("1-dpt/2+1", patch.dpt / 2.0 + 1.0)
+                print("depth min/max = {}/{}".format(numpy.min(patch.dpt),
+                                                     numpy.max(patch.dpt)))
+                cv2.waitKey()
+                cv2.destroyAllWindows()
+
             seqData.append(patch)
 
             # keep only the first few full frames for debugging
@@ -507,6 +620,7 @@ class LinemodTrainDataImporter(object):
                 frame.img = None
                 frame.dpt = None
                 frame.mask = None
+        pbar.finish()
 
         return NamedImgSequence(objName, seqData)
 
@@ -520,6 +634,8 @@ class LinemodTrainDataImporter(object):
 
         cam = BlenderCam()
 
+        debug = False  # TODO !!
+
         cx = center[0]
         cy = center[1]
 
@@ -528,6 +644,8 @@ class LinemodTrainDataImporter(object):
             cropDepth = dptImg[cy, cx]
         else:
             cropDepth = fixedD
+        if debug:
+            print("cropDepth = {}".format(cropDepth))
 
         # point on image plane in world space
         cx = float(cx - cam.cpx) * cam.sensor_w / cam.imgw  # pixel to metric
@@ -579,17 +697,27 @@ class LinemodTrainDataImporter(object):
         #dptPatch = numpy.zeros(ts,dtype=numpy.float32)
         #imgPatch = numpy.zeros(ts,dtype=numpy.float32)
         dptPatch = cv2.warpPerspective(dptImg, M, ts)
+        if debug:
+            print(
+                "dptImg (min/max) = ({}/{})".format(numpy.min(dptImg),
+                                                    numpy.max(dptImg)))
+            print(
+                "dptPatch (min/max) = ({}/{})".format(numpy.min(dptPatch), numpy.max(dptPatch)))
         imgPatch = cv2.warpPerspective(img, M, ts)
-        mask = cv2.warpPerspective(mask, M, ts)
+#         mask = cv2.warpPerspective(mask, M, ts)
 
         # normalize dpt data: crop out a cube around the cropDepth
         dHigh = 20.
         dLow = -20.
         dptPatch = dptPatch - cropDepth
+#         print(
+#             "SUBST dptPatch (min/max) = ({}/{})".format(numpy.min(dptPatch), numpy.max(dptPatch)))
         dptPatch = numpy.maximum(numpy.minimum(dptPatch, dHigh), dLow)
         dptPatch /= numpy.maximum(abs(dHigh), abs(dLow))  # -> -1..1
+#         print(
+#             "AFTER dptPatch (min/max) = ({}/{})".format(numpy.min(dptPatch), numpy.max(dptPatch)))
 
-        patch = Patch(imgPatch, dptPatch, mask, frame, sourceRect)
+        patch = Patch(imgPatch, dptPatch, None, frame, sourceRect)
         # return (dptPatch,imgPatch)
         return patch
 

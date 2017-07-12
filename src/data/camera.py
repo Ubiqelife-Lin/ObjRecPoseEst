@@ -93,7 +93,11 @@ class LinemodCam(object):
         # according to Stefan Hinterstoisser
         # fx=572.41140, px=325.26110, fy=573.57043; py=242.04899
         #
+        # from .ros/camera_info/rgb_PS1080_Primesens.yaml
+        # fx=550.5406479194329, px=312.4711465656782, fy=550.9550330726761, py=234.5177341564895
+        #
         # in blender there is only one focus -> f = (fx+fy)/2 = 573
+        #                                                     = 550
         # image = 640, sensor = 32
         #  -> in world coords (mm) f = 573 *32 / 640 = 573 / 20 = 28.65
         #
@@ -111,7 +115,8 @@ class LinemodCam(object):
         # images
 
         # camera data
-        self.focus = 2.86  # cm, camera focus length
+        self.focus = 2.86  # cm, camera focus length (original)
+#         self.focus = 2.75  # cm, camera focus length
         self.imgw = 640  # pixels
         self.imgh = 480  # pixels
         self.sensor_w = 3.2  # cm,  sensor width
@@ -138,12 +143,12 @@ class LinemodCam(object):
         if pt.ndim > 1:
             x = pt[:, 0]
             y = pt[:, 1]  # y is down in image space
-            z = pt[:, 2]  # looking into negative z
+            z = pt[:, 2]  # looking into positive z
             nPts = pt.shape[0]
         else:
             x = pt[0]
             y = pt[1]  # y is down in image space
-            z = pt[2]  # looking into negative z
+            z = pt[2]  # looking into positive z
 
         # project onto image plane
         x = x * self.focus / z

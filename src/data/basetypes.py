@@ -135,6 +135,7 @@ class LinemodObjPose(object):
         # equals dot(imat,[0,0,0,1])  which is where does the camera center
         # (0,0,0) end up in object space
         self._relCamPos = imat[0:3, 3]
+        self._relCamOrient = imat[0:3, 0:3]
 
         # z-axis rotation invariant pose:
         if self.zRotInv == 1:
@@ -152,6 +153,7 @@ class LinemodObjPose(object):
                 m2 = self.lookAtMat(eye, target, up)
                 im2 = numpy.linalg.inv(m2)
                 self._relCamPosZRotInv = im2[0:3, 3]
+                self._relCamOrientZRotInv = im2[0:3, 0:3]
 #                 print("eye {}".format(eye))
 #                 print("target {}".format(target))
 #                 print("up {}".format(up))
@@ -162,12 +164,18 @@ class LinemodObjPose(object):
                 # something is wrong. the eye is at the origin. lets just bail
                 # (run to the hills ...)
                 self._relCamPosZRotInv = self._relCamPos
+                self._relCamOrientZRotInv = self._relCamOrient
         else:
             self._relCamPosZRotInv = self._relCamPos
+            self._relCamOrientZRotInv = self._relCamOrient
 
         if numpy.any(numpy.isnan(self._relCamPosZRotInv)):
             raise ValueError("NaN in _relCamPos: {}, (zRotInv: {})".format(
                 self._relCamPosZRotInv, self.zRotInv))
+
+        if numpy.any(numpy.isnan(self._relCamOrientZRotInv)):
+            raise ValueError("NaN in _relCamOrient: {}, (zRotInv: {})".format(
+                self._relCamOrientZRotInv, self.zRotInv))
 
     def getMatrix(self):
         # matrix mat transforms a point in the object space into the camera space
@@ -200,6 +208,15 @@ class LinemodObjPose(object):
     @property
     def relCamPosZRotInv(self):
         return self._relCamPosZRotInv
+
+    @property
+    def relCamOrient(self):
+        # where is 0,0,0 of the camera
+        return self._relCamOrient
+
+    @property
+    def relCamOrientZRotInv(self):
+        return self._relCamOrientZRotInv
 
     def lookAtMat(self, eye, target, up):
         # http://3dgep.com/understanding-the-view-matrix/, lookAt
